@@ -46,7 +46,7 @@ public:
     virtual void ISGetProperties(const char *dev);
 
 	int StartExposure(float duration);
-	bool ExposureComplete();
+	bool GrabExposure();
 
 	void addFITSKeywords(fitsfile *fptr);
 

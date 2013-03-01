@@ -54,7 +54,7 @@ QHYCCD *QHYCCD::detectCamera()
         camera = new QHY9(NULL);
     }
 
-    IDLog("QHYCCD::%s(): returning with camera=%p\n", __FUNCTION__, camera);
+   IDLog("QHYCCD::%s(): returning with camera=%p\n", __FUNCTION__, camera);
 
 	return camera;
 }
@@ -62,8 +62,10 @@ QHYCCD *QHYCCD::detectCamera()
 bool QHYCCD::Connect()
 {
     int err;
-	if (usb_connected)
-		return true;
+    const struct libusb_pollfd **pfds;
+
+    if (usb_connected)
+        return true;
 
     IDLog("QHYCCD::%s(): usb_dev=%p\n", __FUNCTION__, usb_dev);
 
@@ -74,11 +76,24 @@ bool QHYCCD::Connect()
         return false;
     }
 
+    pfds = libusb_get_pollfds(NULL);
+    if (!pfds) {
+        IDLog("QHYCCD::%s(): libusb_get_pollfds() returned NULL!\n", __FUNCTION__);
+    } else {
+        IDLog("QHYCCD::%s(): libusb_get_pollfds() returned something (%p)!\n", __FUNCTION__, pfds);
+        const struct libusb_pollfd **pfd;
+        for (pfd = pfds; *pfd; ++pfd) {
+            IDLog("QHYCCD::%s() pfd=%p fd=%d events=%d\n", __FUNCTION__,
+                  (*pfd), (*pfd)->fd, (*pfd)->events);
+        }
+        free(pfds);
+    }
+
     usb_connected = true;
 
     SetTimer(QHYCCD_TIMER);
 
-	IDLog("QHYCCD::%s() Connected!\n", __FUNCTION__);
+    IDLog("QHYCCD::%s() Connected!\n", __FUNCTION__);
 
 	return true;
 }
@@ -98,34 +113,34 @@ bool QHYCCD::Disconnect()
 
 void QHYCCD::TimerHit()
 {
-	struct timeval now;
-	unsigned long elapsed, read_wait;
-	int usb_disabled = 0;
+    struct timeval now;
+    unsigned long elapsed, read_wait;
+    int usb_disabled = 0;
 
-	if (!isConnected())
-		return;
+    if (!isConnected())
+        return;
 
-	/* delay readout until image is written to RAM */
-	read_wait = Exptime;
-	if (DownloadSpeed == 2 && PrimaryCCD.getBinX() == 1)
-		read_wait += 16 * 1000;
+    /* delay readout until image is written to RAM */
+    read_wait = Exptime;
+    if (DownloadSpeed == 2 && PrimaryCCD.getBinX() == 1)
+        read_wait += 16 * 1000;
 
 
-	gettimeofday(&now, NULL);
-	elapsed = tv_diff(&now, &exposure_start);
+    gettimeofday(&now, NULL);
+    elapsed = tv_diff(&now, &exposure_start);
 
-	if (exposing && elapsed >= Exptime)
-		usb_disabled = 1;
+    if (exposing && elapsed >= Exptime)
+        usb_disabled = 1;
 
-	if (exposing && elapsed >= read_wait) {
-		exposing = false;
-		ExposureComplete(&PrimaryCCD);
-	}
+    if (exposing && elapsed >= read_wait) {
+        exposing = false;
+        GrabExposure();
+    }
 
-	if (HasTemperatureControl && !usb_disabled)
-		TempControlTimer();
+    if (HasTemperatureControl && !usb_disabled)
+        TempControlTimer();
 
-	SetTimer(QHYCCD_TIMER);
+    SetTimer(QHYCCD_TIMER);
 }
 
 bool QHYCCD::GetFilterNames(const char *deviceName)

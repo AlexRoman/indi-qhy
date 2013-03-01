@@ -73,6 +73,8 @@ protected:
 	bool HasFilterWheel;
 	std::string filterDesignation[QHYCCD_MAX_FILTERS];
 
+    virtual bool GrabExposure(){ return false; };
+
 	virtual void TempControlTimer() {}
 	void   TimerHit();
 

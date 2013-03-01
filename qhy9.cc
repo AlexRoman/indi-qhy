@@ -115,60 +115,18 @@ int QHY9::StartExposure(float duration)
 }
 
 
-bool QHY9::ExposureComplete()
+bool QHY9::GrabExposure()
 {
-	void *memptr;
-	size_t memsize;
-	int status=0;
-	long naxes[2];
-	long naxis=2;
-	fitsfile *fptr=NULL;
-	int pos = 0;
+    int pos = 0;
 
-	setShutter(SHUTTER_FREE);
+    setShutter(SHUTTER_FREE);
 
-	PrimaryCCD.setFrameBufferSize(p_size * total_p);
-	if (bulk_transfer_read(QHY9_DATA_BULK_EP, (uint8_t *) PrimaryCCD.getFrameBuffer(), p_size, total_p, &pos))
-		return false;
+    PrimaryCCD.setFrameBufferSize(p_size * total_p);
+    if (bulk_transfer_read(QHY9_DATA_BULK_EP, (uint8_t *) PrimaryCCD.getFrameBuffer(), p_size, total_p, &pos))
+        return false;
 
-	fprintf(stderr, "GOT DATA!\n");
-
-	naxes[0]=LineSize;
-	naxes[1]=VerticalSize;
-
-	//  Now we have to send fits format data to the client
-	memsize=2880;
-	memptr=malloc(memsize);
-	fits_create_memfile(&fptr,&memptr,&memsize,2880,realloc,&status);
-	if(status) {
-                IDLog("Error: Failed to create FITS image\n");
-                fits_report_error(stderr, status);  /* print out any error messages */
-                return false;
-	}
-        fits_create_img(fptr, USHORT_IMG , naxis, naxes, &status);
-        if (status)
-        {
-                IDLog("Error: Failed to create FITS image\n");
-                fits_report_error(stderr, status);  /* print out any error messages */
-                return false;
-        }
-
-	addFITSKeywords(fptr);
-
-	fits_write_img(fptr, TUSHORT, 1, LineSize * VerticalSize, PrimaryCCD.getFrameBuffer(), &status);
-	if (status)
-        {
-                IDLog("Error: Failed to write FITS image\n");
-                fits_report_error(stderr, status);  /* print out any error messages */
-                return false;
-        }
-        fits_close_file(fptr,&status);
-
-	PrimaryCCD.setExposureLeft(0);
-
-	//uploadfile(memptr,memsize);
-	free(memptr);
-	return true;
+    ExposureComplete(&PrimaryCCD);
+    return true;
 }
 
 
@@ -263,6 +221,7 @@ void QHY9::setCameraRegisters()
 
 	case 0:
 	case 1:
+    default:
 		HBIN = 1;
 		VBIN = 1;
 		LineSize = 3584;
