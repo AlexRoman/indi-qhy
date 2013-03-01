@@ -6,63 +6,81 @@ using namespace std;
 
 QHYCCD *QHYCCD::detectCamera()
 {
-	static bool libusb_initialized = false;
-	libusb_device **devices;
-	struct libusb_device_descriptor desc;
-	unsigned int devID;
-	int i, n;
-	QHYCCD *camera = NULL;
+    static bool libusb_initialized = false;
+    libusb_device **devices;
+    struct libusb_device_descriptor desc;
+    unsigned int devID;
+    int i, n;
+    QHYCCD *camera = NULL;
 
-	if (!libusb_initialized) {
-		if (libusb_init(NULL))
-			return NULL;
+    if (!libusb_initialized) {
+        if (libusb_init(NULL))
+            return NULL;
 
-		libusb_initialized = true;
-	}
+        libusb_initialized = true;
+    }
 
-	n = libusb_get_device_list(NULL, &devices);
+    n = libusb_get_device_list(NULL, &devices);
 
-	for (i = 0; i < n && !camera; i++) {
-		libusb_device *dev = devices[i];
+    for (i = 0; i < n && !camera; i++) {
+        libusb_device *dev = devices[i];
 
-		if (libusb_get_device_descriptor(dev, &desc) < 0)
-			continue;
+        if (libusb_get_device_descriptor(dev, &desc) < 0)
+            continue;
 
-		devID = (desc.idVendor << 16) + desc.idProduct;
+        devID = (desc.idVendor << 16) + desc.idProduct;
 
-		switch (devID) {
+        switch (devID) {
 
-		case QHYCCD_QHY9_DEVID:
-			camera = new QHY9(dev);
-			break;
+            case QHYCCD_QHY9_DEVID:
+                camera = new QHY9(dev);
+                break;
 
-		case QHYCCD_QHY5_DEVID:
-			camera = new QHY5(dev);
-			break;
-		}
-	}
+            case QHYCCD_QHY5_DEVID:
+                camera = new QHY5(dev);
+                break;
+        }
+    }
 
-	if (camera)
-		libusb_ref_device(camera->usb_dev);
+    /*
+    if (camera)
+        libusb_ref_device(camera->usb_dev);
+    */
 
-	libusb_free_device_list(devices, 1);
+    libusb_free_device_list(devices, 0);
+
+    if(!camera){
+        IDLog("QHYCCD::%s(): Forcing QHY9\n", __FUNCTION__);
+        camera = new QHY9(NULL);
+    }
+
+    IDLog("QHYCCD::%s(): returning with camera=%p\n", __FUNCTION__, camera);
 
 	return camera;
 }
 
-
 bool QHYCCD::Connect()
 {
+    int err;
 	if (usb_connected)
 		return true;
 
-	usb_connected = libusb_open(usb_dev, &usb_handle) ? false : true;
+    IDLog("QHYCCD::%s(): usb_dev=%p\n", __FUNCTION__, usb_dev);
 
-	if (usb_connected) {
-		SetTimer(QHYCCD_TIMER);
-	}
+    err = libusb_open(usb_dev, &usb_handle);
+    if(err){
+        IDLog("QHYCCD::%s(): libusb_open() returned %d - %s\n",
+              __FUNCTION__, err, libusb_error_name(err));
+        return false;
+    }
 
-	return usb_connected;
+    usb_connected = true;
+
+    SetTimer(QHYCCD_TIMER);
+
+	IDLog("QHYCCD::%s() Connected!\n", __FUNCTION__);
+
+	return true;
 }
 
 
@@ -101,7 +119,7 @@ void QHYCCD::TimerHit()
 
 	if (exposing && elapsed >= read_wait) {
 		exposing = false;
-		ExposureComplete();
+		ExposureComplete(&PrimaryCCD);
 	}
 
 	if (HasTemperatureControl && !usb_disabled)
@@ -110,14 +128,14 @@ void QHYCCD::TimerHit()
 	SetTimer(QHYCCD_TIMER);
 }
 
-bool QHYCCD::GetFilterNames(const char *deviceName, const char *groupName)
+bool QHYCCD::GetFilterNames(const char *deviceName)
 {
 	char filterName[MAXINDINAME];
 	char filterLabel[MAXINDILABEL];
 	int i;
 
 	if (FilterNameT != NULL)
-		delete FilterNameT;
+		delete[] FilterNameT;
 
 	FilterNameT = new IText[MaxFilter];
 
@@ -127,7 +145,7 @@ bool QHYCCD::GetFilterNames(const char *deviceName, const char *groupName)
 		IUFillText(&FilterNameT[i], filterName, filterLabel, filterDesignation[i].c_str());
 	}
 
-	IUFillTextVector(FilterNameTP, FilterNameT, MaxFilter, deviceName, "FILTER_NAME", "Filter", groupName, IP_RW, 1, IPS_IDLE);
+	IUFillTextVector(FilterNameTP, FilterNameT, MaxFilter, deviceName, "FILTER_NAME", "Filter", FILTER_TAB, IP_RW, 1, IPS_IDLE);
 
 	return true;
 }
@@ -139,26 +157,23 @@ bool QHYCCD::initProperties()
 
 
 	if (HasFilterWheel) {
-		initFilterProperties(deviceName(), FILTER_TAB);
-		GetFilterNames(deviceName(), FILTER_TAB);
+		initFilterProperties(getDeviceName(), FILTER_TAB);
+		GetFilterNames(getDeviceName());
 	}
 
 	if (HasTemperatureControl) {
 		/* FIXME: this is ugly, with the 3 groups, but e.g. xephem sends all values in a group when setting, so
 		   trying to avoid overwriting temp setpoint with current temp for instance */
 
-		TemperatureSetNV = new INumberVectorProperty();
 		IUFillNumber(&TemperatureN[0], "CCD_TEMPERATURE_VALUE", "Temp. Setpoint (degC)", "%4.2f", -50, 50, 0, TemperatureTarget);
-		IUFillNumberVector(TemperatureSetNV, &TemperatureN[0], 1, deviceName(), "CCD_TEMPERATURE", "Temperature", "Main Control", IP_RW, 60, IPS_IDLE);
+		IUFillNumberVector(&TemperatureSetNV, &TemperatureN[0], 1, getDeviceName(), "CCD_TEMPERATURE", "Temperature", "Main Control", IP_RW, 60, IPS_IDLE);
 
-		TempPWMSetNV = new INumberVectorProperty();
 		IUFillNumber(&TemperatureN[1], "CCD_TEC_PWM_LIMIT_VALUE", "TEC Power limit (%)", "%3.0f", 0, 100, 0, TEC_PWMLimit);
-		IUFillNumberVector(TempPWMSetNV, &TemperatureN[1], 1, deviceName(), "CCD_TEC_PWM_LIMIT", "TEC Power", "Main Control", IP_RW, 60, IPS_IDLE);
+		IUFillNumberVector(&TempPWMSetNV, &TemperatureN[1], 1, getDeviceName(), "CCD_TEC_PWM_LIMIT", "TEC Power", "Main Control", IP_RW, 60, IPS_IDLE);
 
-		TemperatureGetNV = new INumberVectorProperty();
 		IUFillNumber(&TemperatureN[2], "CCD_TEMPERATURE_CURRENT_VALUE", "Temperature (degC)", "%4.2f", -50, 50, 0, Temperature);
 		IUFillNumber(&TemperatureN[3], "CCD_TEC_PWM_CURRENT_VALUE", "TEC Power (%)", "%3.0f", 0, 100, 0, TEC_PWM);
-		IUFillNumberVector(TemperatureGetNV, &TemperatureN[2], 2, deviceName(), "CCD_TEMPERATURE_INFO", "Temperature", "Temperature Info", IP_RO, 60, IPS_IDLE);
+		IUFillNumberVector(&TemperatureGetNV, &TemperatureN[2], 2, getDeviceName(), "CCD_TEMPERATURE_INFO", "Temperature", "Temperature Info", IP_RO, 60, IPS_IDLE);
 	}
 
 	return true;
@@ -171,29 +186,35 @@ bool QHYCCD::updateProperties()
 
 	if (isConnected()) {
 		if (HasTemperatureControl) {
-			defineNumber(TemperatureSetNV);
-			defineNumber(TempPWMSetNV);
-			defineNumber(TemperatureGetNV);
+			defineNumber(&TemperatureSetNV);
+			defineNumber(&TempPWMSetNV);
+			defineNumber(&TemperatureGetNV);
 		}
 
 		if (HasFilterWheel) {
 			defineText(FilterNameTP);
-			defineNumber(FilterSlotNP);
+			defineNumber(&FilterSlotNP);
 		}
 	} else {
 		if (HasTemperatureControl) {
-			deleteProperty(TemperatureSetNV->name);
-			deleteProperty(TempPWMSetNV->name);
-			deleteProperty(TemperatureGetNV->name);
+			deleteProperty(TemperatureSetNV.name);
+			deleteProperty(TempPWMSetNV.name);
+			deleteProperty(TemperatureGetNV.name);
 		}
 
 		if (HasFilterWheel) {
 			deleteProperty(FilterNameTP->name);
-			deleteProperty(FilterSlotNP->name);
+			deleteProperty(FilterSlotNP.name);
 		}
 	}
 
 	return true;
+}
+
+void QHYCCD::ISGetProperties(const char *dev)
+{
+    INDI::CCD::ISGetProperties(dev);
+    IDLog("QHYCCD::%s(%s)\n", __FUNCTION__, dev);
 }
 
 void QHYCCD::addFITSKeywords(fitsfile *fptr)
@@ -261,8 +282,8 @@ bool QHYCCD::ISNewNumber(const char *dev, const char *name, double values[], cha
 	double v;
 	INumber *np;
 
-	fprintf(stderr, "ISNEWNUMBER dev %s, device %s, name %s\n\n", dev, deviceName(), name);
-	if (dev && !strcmp(dev, deviceName())) {
+	fprintf(stderr, "ISNEWNUMBER dev %s, device %s, name %s\n\n", dev, getDeviceName(), name);
+	if (dev && !strcmp(dev, getDeviceName())) {
 		if (HasTemperatureControl && !strcmp(name, "CCD_TEMPERATURE")) {
 			if (n < 1) return false;
 
@@ -270,8 +291,8 @@ bool QHYCCD::ISNewNumber(const char *dev, const char *name, double values[], cha
 
 			TemperatureTarget = v;
 			TemperatureN[0].value = v;
-			TemperatureSetNV->s = IPS_OK;
-			IDSetNumber(TemperatureSetNV, NULL);
+			TemperatureSetNV.s = IPS_OK;
+			IDSetNumber(&TemperatureSetNV, NULL);
 
 			return true;
 		}
@@ -283,36 +304,36 @@ bool QHYCCD::ISNewNumber(const char *dev, const char *name, double values[], cha
 
 			TEC_PWMLimit = v;
 			TemperatureN[1].value = v;
-			TempPWMSetNV->s = IPS_OK;
-			IDSetNumber(TempPWMSetNV, NULL);
+			TempPWMSetNV.s = IPS_OK;
+			IDSetNumber(&TempPWMSetNV, NULL);
 
 			return true;
 		}
 
-		if (HasFilterWheel && !strcmp(name, FilterSlotNP->name)) {
+		if (HasFilterWheel && !strcmp(name, FilterSlotNP.name)) {
 			TargetFilter = values[0];
 
-			np = IUFindNumber(FilterSlotNP, names[0]);
+			np = IUFindNumber(&FilterSlotNP, names[0]);
 
 			if (!np) {
-				FilterSlotNP->s = IPS_ALERT;
-				IDSetNumber(FilterSlotNP, "Unknown error. %s is not a member of %s property.", names[0], name);
+				FilterSlotNP.s = IPS_ALERT;
+				IDSetNumber(&FilterSlotNP, "Unknown error. %s is not a member of %s property.", names[0], name);
 				return false;
 			}
 
 			if (TargetFilter < MinFilter || TargetFilter > MaxFilter) {
-				FilterSlotNP->s = IPS_ALERT;
-				IDSetNumber(FilterSlotNP, "Error: valid range of filter is from %d to %d", MinFilter, MaxFilter);
+				FilterSlotNP.s = IPS_ALERT;
+				IDSetNumber(&FilterSlotNP, "Error: valid range of filter is from %d to %d", MinFilter, MaxFilter);
 				return false;
 			}
 
-			IUUpdateNumber(FilterSlotNP, values, names, n);
+			IUUpdateNumber(&FilterSlotNP, values, names, n);
 
 			SelectFilter(TargetFilter);
 
 			FilterSlotN[0].value = TargetFilter;
-			FilterSlotNP->s = IPS_OK;
-			IDSetNumber(FilterSlotNP, "Setting current filter to slot %d", TargetFilter);
+			FilterSlotNP.s = IPS_OK;
+			IDSetNumber(&FilterSlotNP, "Setting current filter to slot %d", TargetFilter);
 
 			return true;
 		}
@@ -323,7 +344,7 @@ bool QHYCCD::ISNewNumber(const char *dev, const char *name, double values[], cha
 
 bool QHYCCD::ISNewSwitch(const char *dev, const char *name, ISState *states, char *names[], int n)
 {
-	if (dev && !strcmp(dev, deviceName())) {
+	if (dev && !strcmp(dev, getDeviceName())) {
         }
 
 	return CCD::ISNewSwitch(dev, name, states, names, n);
@@ -333,7 +354,7 @@ bool QHYCCD::ISNewText (const char *dev, const char *name, char *texts[], char *
 {
 	int i;
 
-	if (dev && !strcmp(dev, deviceName())) {
+	if (dev && !strcmp(dev, getDeviceName())) {
 		if (!strcmp(name, FilterNameTP->name)) {
 			if (IUUpdateText(FilterNameTP, texts, names, n) < 0) {
 				FilterNameTP->s = IPS_ALERT;

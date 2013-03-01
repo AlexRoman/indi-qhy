@@ -202,4 +202,3 @@ void QHY5::setCameraRegisters()
 
 	//	vendor_request_write(QHY5_REGISTERS_CMD, REG, 64);
 }
-

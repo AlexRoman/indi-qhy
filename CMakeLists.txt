@@ -16,7 +16,7 @@ include (MacroLogFeature)
 include (MacroBoolTo01)
 include (CheckIncludeFiles)
 
-find_package(USB10 REQUIRED)
+find_package(USB-1 REQUIRED)
 find_package(CFITSIO REQUIRED)
 find_package(INDI REQUIRED)
 find_package(ZLIB REQUIRED)
@@ -39,7 +39,7 @@ set(indiqhy_SRCS
 add_executable(indi_qhy ${indiqhy_SRCS})
 
 target_link_libraries(indi_qhy ${INDI_LIBRARIES} ${INDI_MAIN_LIBRARIES} ${INDI_DRIVER_LIBRARIES}
-  ${CFITSIO_LIBRARIES} ${QHY_LIBRARIES} ${LIBUSB10_LIBRARIES} ${ZLIB_LIBRARIES} )
+  ${CFITSIO_LIBRARIES} ${QHY_LIBRARIES} ${LIBUSB_1_LIBRARIES} ${ZLIB_LIBRARIES} )
 
 install(TARGETS indi_qhy RUNTIME DESTINATION bin )
 

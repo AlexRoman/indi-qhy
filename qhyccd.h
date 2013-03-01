@@ -12,7 +12,7 @@
 
 #include <indidevapi.h>
 #include <indicom.h>
-#include <defaultdriver.h>
+#include <defaultdevice.h>
 #include <indiccd.h>
 #include <indifilterinterface.h>
 #include <base64.h>
@@ -31,32 +31,38 @@ class QHYCCD : public INDI::CCD, public INDI::FilterInterface
 public:
 	static QHYCCD *detectCamera();
 
-        QHYCCD(libusb_device *usbdev) {
-		this->usb_dev = usbdev;
-
-		HasTemperatureControl = false;
-		HasGuideHead = false;
-		HasSt4Port = false;
-		HasFilterWheel = false;
+    QHYCCD(libusb_device *usbdev) : CCD(), FilterInterface(),
+        usb_dev(usbdev), usb_connected(false), usb_handle(NULL),
+        exposing(false), TemperatureTarget(0), Temperature(0),
+        TEC_PWMLimit(0), TEC_PWM(0)
+    {
+        HasTemperatureControl = false;
+        HasGuideHead = false;
+        HasSt4Port = false;
+        HasFilterWheel = false;
 	}
 
 	~QHYCCD() { Disconnect(); }
 
 	/* INDI stuff */
-	bool Connect();
-	bool Disconnect();
+    //virtual const char *getDriverName();
+    virtual const char *getDefaultName(){ return NULL; };
 
-	bool ISNewNumber(const char *dev, const char *name, double values[], char *names[], int n);
-	bool ISNewSwitch(const char *dev, const char *name, ISState *states, char *names[], int n);
-	bool ISNewText (const char *dev, const char *name, char *texts[], char *names[], int n);
+	virtual bool Connect();
+	virtual bool Disconnect();
 
-	bool initProperties();
-	bool updateProperties();
+	virtual bool ISNewNumber(const char *dev, const char *name, double values[], char *names[], int n);
+	virtual bool ISNewSwitch(const char *dev, const char *name, ISState *states, char *names[], int n);
+	virtual bool ISNewText (const char *dev, const char *name, char *texts[], char *names[], int n);
+    virtual void ISGetProperties(const char *dev);
+
+	virtual bool initProperties();
+	virtual bool updateProperties();
 
 	virtual void addFITSKeywords(fitsfile *fptr);
 
 	/* Not all cameras have CFW interface */
-	virtual bool GetFilterNames(const char *deviceName, const char *groupName);
+	virtual bool GetFilterNames(const char *deviceName);
 	virtual bool SetFilterNames() { return false; }
 	virtual bool SelectFilter(int i) { return false; }
 	virtual int QueryFilter() { return 0; }
@@ -70,8 +76,8 @@ protected:
 	virtual void TempControlTimer() {}
 	void   TimerHit();
 
+    libusb_device        *usb_dev;           /* USB device address */
 	bool                  usb_connected;
-	libusb_device        *usb_dev;	         /* USB device address */
 	libusb_device_handle *usb_handle;	 /* USB device handle */
 
 	bool                  exposing;	         /* true if currently exposing */
@@ -85,9 +91,9 @@ protected:
 	int     TEC_PWM;		         /* current TEC power */
 	INumber TemperatureN[4];
 
-	INumberVectorProperty *TemperatureSetNV;  /* temp setpoint */
-	INumberVectorProperty *TempPWMSetNV;      /* PWM limit */
-	INumberVectorProperty *TemperatureGetNV;  /* R/O, current temp and PWM */
+	INumberVectorProperty TemperatureSetNV;  /* temp setpoint */
+	INumberVectorProperty TempPWMSetNV;      /* PWM limit */
+	INumberVectorProperty TemperatureGetNV;  /* R/O, current temp and PWM */
 
 
 	/* QHY Camera Settings */

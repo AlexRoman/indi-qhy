@@ -33,17 +33,17 @@ public:
 
 	QHY9(libusb_device *usbdev) : QHYCCD(usbdev) {
 		initCamera();
-		ReadOutSP = new ISwitchVectorProperty;
 	}
 
-	~QHY9() { delete ReadOutSP; }
+	~QHY9() {}
 
-	const char *getDefaultName() { return "QHY9"; }
+	virtual const char *getDefaultName() { return "QHY9"; }
 
 	void initCamera();
 
 	bool initProperties();
 	bool updateProperties();
+    virtual void ISGetProperties(const char *dev);
 
 	int StartExposure(float duration);
 	bool ExposureComplete();
@@ -64,7 +64,7 @@ private:
 
 	// readout speed
 	ISwitch ReadOutS[3];
-	ISwitchVectorProperty *ReadOutSP;
+	ISwitchVectorProperty ReadOutSP;
 
 
 	double mv_to_degrees(double mv);

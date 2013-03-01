@@ -1,50 +1,51 @@
-
 #include "qhyccd.h"
 #include "qhy9.h"
+
+#include <unistd.h>
 
 using namespace std;
 
 void QHY9::initCamera()
 {
-	fprintf(stderr, "QHY9 INIT CAMERA\n");
-	HasTemperatureControl = true;
-	HasFilterWheel = true;
+    fprintf(stderr, "QHY9 INIT CAMERA\n");
+    HasTemperatureControl = true;
+    HasFilterWheel = true;
 
-	TemperatureTarget = 50.0;
-	Temperature = 50.0;
-	TEC_PWM = 0;
-	TEC_PWMLimit = 80;
+    TemperatureTarget = 50.0;
+    Temperature = 50.0;
+    TEC_PWM = 0;
+    TEC_PWMLimit = 80;
 
-	Gain = 20;
-	Offset = 120;
-	MechanicalShutterMode = 0;
-	DownloadCloseTEC = 1;
-	SDRAM_MAXSIZE = 100;
+    Gain = 20;
+    Offset = 120;
+    MechanicalShutterMode = 0;
+    DownloadCloseTEC = 1;
+    SDRAM_MAXSIZE = 100;
 
-	SetCCDParams(QHY9_SENSOR_WIDTH, QHY9_SENSOR_HEIGHT, 16, 5.4, 5.4);
-
-	MinFilter = 1;
-	MaxFilter = 5;
-	CurrentFilter = 1;
-	TargetFilter = 1;
+    MinFilter = 1;
+    MaxFilter = 5;
+    CurrentFilter = 1;
+    TargetFilter = 1;
 }
 
 bool QHY9::initProperties()
 {
-	QHYCCD::initProperties();
+    QHYCCD::initProperties();
 
-	/* Readout speed */
-	IUFillSwitch(&ReadOutS[0], "READOUT_FAST",   "Fast",   ISS_OFF);
-	IUFillSwitch(&ReadOutS[1], "READOUT_NORMAL", "Normal", ISS_OFF);
-	IUFillSwitch(&ReadOutS[2], "READOUT_SLOW",   "Slow",   ISS_ON);
+    SetCCDParams(QHY9_SENSOR_WIDTH, QHY9_SENSOR_HEIGHT, 16, 5.4, 5.4);
 
-	IUFillSwitchVector(ReadOutSP, ReadOutS, 3, deviceName(),
-			   "READOUT_SPEED", "Readout Speed",
-			   IMAGE_SETTINGS_TAB, IP_WO, ISR_1OFMANY, 0, IPS_IDLE);
+    /* Readout speed */
+    IUFillSwitch(&ReadOutS[0], "READOUT_FAST",   "Fast",   ISS_OFF);
+    IUFillSwitch(&ReadOutS[1], "READOUT_NORMAL", "Normal", ISS_OFF);
+    IUFillSwitch(&ReadOutS[2], "READOUT_SLOW",   "Slow",   ISS_ON);
 
-	GetFilterNames(deviceName(), FILTER_TAB);
+    IUFillSwitchVector(&ReadOutSP, ReadOutS, 3, getDeviceName(),
+                       "READOUT_SPEED", "Readout Speed",
+                       IMAGE_SETTINGS_TAB, IP_WO, ISR_1OFMANY, 0, IPS_IDLE);
 
-	return true;
+    GetFilterNames(getDeviceName());
+
+    return true;
 }
 
 bool QHY9::updateProperties()
@@ -52,23 +53,29 @@ bool QHY9::updateProperties()
 	QHYCCD::updateProperties();
 
 	if (isConnected()) {
-		defineSwitch(ReadOutSP);
+		defineSwitch(&ReadOutSP);
 
 		if (FilterNameT != NULL) {
 			defineText(FilterNameTP);
-			defineNumber(FilterSlotNP);
+			defineNumber(&FilterSlotNP);
 		}
 
 	} else {
-		deleteProperty(ReadOutSP->name);
+		deleteProperty(ReadOutSP.name);
 
 		if (FilterNameT != NULL) {
 			deleteProperty(FilterNameTP->name);
-			deleteProperty(FilterSlotNP->name);
+			deleteProperty(FilterSlotNP.name);
 		}
 	}
 
 	return true;
+}
+
+void QHY9::ISGetProperties(const char *dev)
+{
+    IDLog("QHY9::%s(%s)\n", __FUNCTION__, dev);
+    QHYCCD::ISGetProperties(dev);
 }
 
 int QHY9::StartExposure(float duration)
@@ -157,9 +164,9 @@ bool QHY9::ExposureComplete()
         }
         fits_close_file(fptr,&status);
 
-	PrimaryCCD.setExposureDone();
+	PrimaryCCD.setExposureLeft(0);
 
-	uploadfile(memptr,memsize);
+	//uploadfile(memptr,memsize);
 	free(memptr);
 	return true;
 }
@@ -392,28 +399,28 @@ void QHY9::setCameraRegisters()
 
 bool QHY9::ISNewSwitch(const char *dev, const char *name, ISState *states, char *names[], int n)
 {
-	if (dev && !strcmp(dev, deviceName())) {
-		if (!strcmp(name, ReadOutSP->name)) {
-			if (IUUpdateSwitch(ReadOutSP, states, names, n) < 0)
-				return false;
+    if (dev && !strcmp(dev, getDeviceName())) {
+        if (!strcmp(name, ReadOutSP.name)) {
+            if (IUUpdateSwitch(&ReadOutSP, states, names, n) < 0)
+                return false;
 
-			if (ReadOutS[0].s == ISS_ON)
-				DownloadSpeed = 0;
+            if (ReadOutS[0].s == ISS_ON)
+                DownloadSpeed = 0;
 
-			if (ReadOutS[1].s == ISS_ON)
-				DownloadSpeed = 1;
+            if (ReadOutS[1].s == ISS_ON)
+                DownloadSpeed = 1;
 
-			if (ReadOutS[2].s == ISS_ON)
-				DownloadSpeed = 2;
+            if (ReadOutS[2].s == ISS_ON)
+                DownloadSpeed = 2;
 
-                        ReadOutSP->s = IPS_OK;
-			IDSetSwitch(ReadOutSP, NULL);
+            ReadOutSP.s = IPS_OK;
+            IDSetSwitch(&ReadOutSP, NULL);
 
-			fprintf(stderr, "download speed %d\n", DownloadSpeed);
-		}
+            fprintf(stderr, "download speed %d\n", DownloadSpeed);
         }
+    }
 
-	return CCD::ISNewSwitch(dev, name, states, names, n);
+    return CCD::ISNewSwitch(dev, name, states, names, n);
 }
 
 void QHY9::beginVideo()
@@ -436,7 +443,7 @@ void QHY9::abortVideo()
 
 void QHY9::setShutter(int mode)
 {
-	uint8_t buffer[1] = { mode };
+	uint8_t buffer[1] = { (uint8_t)mode };
 
 	libusb_control_transfer(usb_handle, QHY9_VENDOR_REQUEST_WRITE,
 				QHY9_SHUTTER_CMD, 0, 0, buffer, 1, 0);
@@ -510,11 +517,11 @@ void QHY9::TempControlTimer()
 		TemperatureN[2].value = Temperature;
 		TemperatureN[3].value = TEC_PWM * 100 / 256;
 
-		TemperatureGetNV->s = IPS_OK;
+		TemperatureGetNV.s = IPS_OK;
 
 		counter++;
 		if ((counter >= 2) && isConnected()) {
-			IDSetNumber(TemperatureGetNV, NULL);
+			IDSetNumber(&TemperatureGetNV, NULL);
 			counter = 0;
 		}
 
@@ -522,6 +529,3 @@ void QHY9::TempControlTimer()
 			voltage, Temperature, TemperatureTarget, TEC_PWM);
 	}
 }
-
-
-

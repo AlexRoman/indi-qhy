@@ -9,24 +9,30 @@ void initialize()
 		return;
 
 	camera = QHYCCD::detectCamera();
+    if(camera)
+        IDLog("%s: camera device name = %s\n", __FUNCTION__, camera->getDeviceName());
 }
 
 
 void ISGetProperties(const char *dev)
 {
+    IDLog("%s(%s)\n", __FUNCTION__, dev);
 	initialize();
+    IDLog("%s(): initialized\n", __FUNCTION__);
 
-	if (!camera || (dev && strcmp(dev, camera->deviceName())))
+	if (!camera || (dev && strcmp(dev, camera->getDeviceName())))
 		return;
 
+    IDLog("%s(): calling get properties on camera\n", __FUNCTION__);
 	camera->ISGetProperties(dev);
+    IDLog("%s(): done\n", __FUNCTION__);
 }
 
 void ISNewSwitch(const char *dev, const char *name, ISState *states, char *names[], int n)
 {
 	initialize();
 
-	if (!camera || (dev && strcmp(dev, camera->deviceName())))
+	if (!camera || (dev && strcmp(dev, camera->getDeviceName())))
 		return;
 
 	camera->ISNewSwitch(dev, name, states, names, n);
@@ -36,7 +42,7 @@ void ISNewText (const char *dev, const char *name, char *texts[], char *names[],
 {
 	initialize();
 
-	if (!camera || (dev && strcmp(dev, camera->deviceName())))
+	if (!camera || (dev && strcmp(dev, camera->getDeviceName())))
 		return;
 
 	camera->ISNewText(dev, name, texts, names, n);
@@ -46,7 +52,7 @@ void ISNewNumber (const char *dev, const char *name, double values[], char *name
 {
 	initialize();
 
-	if (!camera || (dev && strcmp(dev, camera->deviceName())))
+	if (!camera || (dev && strcmp(dev, camera->getDeviceName())))
 		return;
 
 	camera->ISNewNumber(dev, name, values, names, n);
